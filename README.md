@@ -9,6 +9,7 @@ MCP (Model Context Protocol) server for the Polish national e-invoicing system K
 This server enables AI assistants and automation tools to interact with the KSeF API, providing seamless integration with Poland's mandatory e-invoicing system operated by the Ministry of Finance.
 
 **Key Features:**
+
 - 12 MCP tools for complete KSeF API coverage
 - Authentication session management
 - Invoice querying, retrieval, and submission
@@ -21,8 +22,9 @@ This server enables AI assistants and automation tools to interact with the KSeF
 ### Installation
 
 **From source:**
+
 ```bash
-git clone https://github.com/YOUR_USERNAME/ksef-mcp.git
+git clone https://github.com/Flippico/ksef-mcp.git
 cd ksef-mcp
 cargo build --release
 ```
@@ -30,6 +32,7 @@ cargo build --release
 The binary will be at: `target/release/ksef-mcp`
 
 **Using cargo install (when published):**
+
 ```bash
 cargo install ksef-mcp-server
 ```
@@ -55,22 +58,26 @@ Restart your MCP client after configuration.
 ## Available Tools
 
 ### Session Management
+
 - **get_active_sessions** - List active authentication sessions
 - **get_current_session** - Get current session information
 - **terminate_session** - Terminate a specific session
 
 ### Invoice Operations
+
 - **get_invoice** - Retrieve invoice details by KSeF number
 - **query_invoice_metadata** - Query invoice metadata with filters
 - **create_invoice_export** - Create invoice exports
 - **get_export_status** - Check export status
 
 ### Online Sessions
+
 - **create_online_session** - Create new online session for invoice processing
 - **close_online_session** - Close an active online session
 - **submit_invoice** - Submit invoice XML to a session
 
 ### System Information
+
 - **get_public_key_certificates** - Get Ministry of Finance public certificates
 - **get_rate_limits** - Check API rate limits and usage
 
@@ -98,6 +105,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_rate_l
 ## API Endpoint
 
 The server connects to the KSeF test environment by default:
+
 - **Test API:** `https://api-test.ksef.mf.gov.pl/v2`
 
 For production use, modify the `DEFAULT_API_BASE_URL` in the ksef-client library.
@@ -105,6 +113,7 @@ For production use, modify the `DEFAULT_API_BASE_URL` in the ksef-client library
 ## Authentication
 
 Most KSeF endpoints require authentication via session token. The current version expects:
+
 1. Authenticate with KSeF API through standard authentication flow
 2. Obtain a session token
 3. The server will use the token for API requests
@@ -162,6 +171,7 @@ cargo clippy --all-targets --all-features
 ## Use Cases
 
 Perfect for:
+
 - Polish businesses automating e-invoicing processes
 - Integration with AI assistants for invoice management
 - Building automation tools for KSeF compliance
@@ -170,12 +180,14 @@ Perfect for:
 ## Contributing
 
 Contributions are welcome! Please:
+
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes with tests
 4. Submit a pull request
 
 For bugs, open an issue with:
+
 - Steps to reproduce
 - Expected vs actual behavior
 - System information
@@ -186,7 +198,7 @@ MIT License - see [LICENSE](./LICENSE) file for details.
 
 ## Support
 
-- **Issues:** [GitHub Issues](https://github.com/YOUR_USERNAME/ksef-mcp/issues)
+- **Issues:** [GitHub Issues](https://github.com/Flippico/ksef-mcp/issues)
 - **KSeF API:** [Official Documentation](https://github.com/CIRFMF/ksef-docs)
 - **MCP Protocol:** [modelcontextprotocol.io](https://modelcontextprotocol.io)
 
