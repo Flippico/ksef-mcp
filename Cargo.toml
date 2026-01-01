@@ -1,7 +1,7 @@
 [package]
 name = "ksef-mcp-server"
-version.workspace = true
-edition.workspace = true
+version = "0.1.0"
+edition = "2021"
 authors = ["Flippico Sp. z o.o."]
 description = "MCP server for the Polish e-invoicing system KSeF (Krajowy System e-Faktur)"
 license = "MIT"
@@ -12,14 +12,31 @@ readme = "README.md"
 keywords = ["mcp", "ksef", "invoicing", "poland", "e-invoicing"]
 categories = ["api-bindings", "command-line-utilities"]
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
 [[bin]]
 name = "ksef-mcp"
 path = "src/main.rs"
 
+members = [
+    "crates/mcp-protocol",
+    "crates/ksef-client",
+]
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+anyhow = "1"
+
 [dependencies]
-mcp-protocol = { path = "../mcp-protocol" }
-ksef-client = { path = "../ksef-client" }
+mcp-protocol = { path = "./crates/mcp-protocol" }
+ksef-client = { path = "./crates/ksef-client" }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+reqwest.workspace = true
 anyhow.workspace = true
