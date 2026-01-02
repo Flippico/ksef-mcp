@@ -190,8 +190,9 @@ impl KsefClient {
         let encrypted_token = if self.disable_encryption {
             eprintln!("Test mode: encoding token as base64 (no encryption)");
             // Format: token|timestamp (as per API spec)
-            let payload = format!("{}|{}", ksef_token, challenge.timestamp_ms);
-            BASE64.encode(payload.as_bytes())
+            // let payload = format!("{}|{}", ksef_token, challenge.timestamp_ms);
+            // BASE64.encode(payload.as_bytes())
+            ksef_token.to_string()
         } else {
             eprintln!("Production mode: encrypting token with RSA-OAEP");
             Self::encrypt_token(ksef_token, challenge.timestamp_ms, public_key_pem)?
@@ -204,8 +205,7 @@ impl KsefClient {
                 identifier_type: "nip".to_string(), // lowercase 'nip' as shown in your curl
                 value: nip.to_string(),
             },
-            encrypted_token: "c7e32f143ec84261a99ced14b902d7a74c4ab83993ef4a8ebd8537d075726a9d"
-                .to_string(),
+            encrypted_token,
         };
 
         // Send authentication request
