@@ -155,16 +155,28 @@ impl KsefClient {
     }
 
     /// Helper: Encrypt KSeF token with RSA-OAEP
-    fn encrypt_token(ksef_token: &str, timestamp_ms: i64, public_key_pem: &str) -> Result<String> {
+    fn encrypt_token(ksef_token: &str, timestamp_ms: i64, cert_base64: &str) -> Result<String> {
         use rsa::pkcs8::DecodePublicKey;
         use sha2::Sha256;
 
         // Format: token|timestampMs
         let payload = format!("{}|{}", ksef_token, timestamp_ms);
 
-        // Parse the public key from PEM format
-        let public_key = RsaPublicKey::from_public_key_pem(public_key_pem)
-            .map_err(|e| anyhow!("Failed to parse public key: {}", e))?;
+        // Decode base64 certificate
+        let cert_der = BASE64
+            .decode(cert_base64.as_bytes())
+            .map_err(|e| anyhow!("Failed to decode certificate base64: {}", e))?;
+
+        // Parse X.509 certificate
+        let (_, cert) = x509_parser::parse_x509_certificate(&cert_der)
+            .map_err(|e| anyhow!("Failed to parse X.509 certificate: {}", e))?;
+
+        // Extract public key from certificate (SubjectPublicKeyInfo format)
+        let public_key_der = cert.public_key().raw;
+
+        // Parse RSA public key from DER (SubjectPublicKeyInfo / PKCS#8)
+        let public_key = RsaPublicKey::from_public_key_der(public_key_der)
+            .map_err(|e| anyhow!("Failed to parse RSA public key from certificate: {}", e))?;
 
         // Encrypt using RSA-OAEP with SHA-256
         let padding = Oaep::new::<Sha256>();
@@ -181,7 +193,7 @@ impl KsefClient {
         &self,
         nip: &str,
         ksef_token: &str,
-        public_key_pem: &str,
+        cert_base64: &str,
     ) -> Result<AuthInitResponse> {
         // Get challenge
         let challenge = self.get_auth_challenge().await?;
@@ -190,12 +202,11 @@ impl KsefClient {
         let encrypted_token = if self.disable_encryption {
             eprintln!("Test mode: encoding token as base64 (no encryption)");
             // Format: token|timestamp (as per API spec)
-            // let payload = format!("{}|{}", ksef_token, challenge.timestamp_ms);
-            // BASE64.encode(payload.as_bytes())
-            ksef_token.to_string()
+            let payload = format!("{}|{}", ksef_token, challenge.timestamp_ms);
+            BASE64.encode(payload.as_bytes())
         } else {
             eprintln!("Production mode: encrypting token with RSA-OAEP");
-            Self::encrypt_token(ksef_token, challenge.timestamp_ms, public_key_pem)?
+            Self::encrypt_token(ksef_token, challenge.timestamp_ms, cert_base64)?
         };
 
         // Prepare request
@@ -306,19 +317,14 @@ impl KsefClient {
             .find(|c| c.usage.contains(&"KsefTokenEncryption".to_string()))
             .ok_or_else(|| anyhow!("No certificate found for KsefTokenEncryption"))?;
 
-        // Convert certificate to PEM format
-        let pem = format!(
-            "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----",
-            cert.certificate
-        );
-
-        Ok(pem)
+        // Return the base64-encoded certificate (will be parsed by encrypt_token)
+        Ok(cert.certificate.clone())
     }
 
     /// Complete authentication flow (automatically fetches public key if needed)
     pub async fn authenticate(&self, nip: &str, ksef_token: &str) -> Result<String> {
         // Step 0: Get public key certificate (only if encryption is enabled)
-        let public_key_pem = if self.disable_encryption {
+        let cert_base64 = if self.disable_encryption {
             String::new() // Not needed in test mode
         } else {
             eprintln!("Fetching public key certificate...");
@@ -328,7 +334,7 @@ impl KsefClient {
         // Step 1 & 2: Initiate authentication
         eprintln!("Initiating authentication...");
         let auth_init = self
-            .authenticate_with_ksef_token(nip, ksef_token, &public_key_pem)
+            .authenticate_with_ksef_token(nip, ksef_token, &cert_base64)
             .await?;
         let auth_token = auth_init.authentication_token.token.clone();
         let reference_number = auth_init.reference_number.clone();
@@ -339,7 +345,7 @@ impl KsefClient {
             .check_auth_status(&reference_number, &auth_token)
             .await?;
 
-        if status.status.code != 200 {
+        if status.status.code <= !200 {
             return Err(anyhow!(
                 "Authentication failed with status {}: {}",
                 status.status.code,
