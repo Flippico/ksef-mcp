@@ -15,15 +15,30 @@ impl McpServer {
         }
     }
 
-    async fn handle_request(&mut self, request: JsonRpcRequest) -> JsonRpcResponse {
+    async fn handle_request(&mut self, request: JsonRpcRequest) -> Option<JsonRpcResponse> {
         let id = request.id.clone();
 
-        match request.method.as_str() {
+        // Handle notifications (no id = no response)
+        if id.is_none() {
+            match request.method.as_str() {
+                "notifications/initialized" => {
+                    eprintln!("Client initialized");
+                    return None;
+                }
+                _ => {
+                    eprintln!("Unknown notification: {}", request.method);
+                    return None;
+                }
+            }
+        }
+
+        // Handle requests (with id = send response)
+        Some(match request.method.as_str() {
             "initialize" => self.handle_initialize(id),
             "tools/list" => self.handle_list_tools(id),
             "tools/call" => self.handle_tool_call(id, request.params).await,
             _ => JsonRpcResponse::method_not_found(id, &request.method),
-        }
+        })
     }
 
     fn handle_initialize(&self, id: Option<Value>) -> JsonRpcResponse {
@@ -208,6 +223,40 @@ impl McpServer {
                     "required": ["sessionReferenceNumber", "invoiceData"]
                 }),
             ),
+            ToolDefinition::new(
+                "authenticate",
+                "Authenticate with KSeF API using NIP and KSeF token (public key is fetched automatically)",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "nip": {
+                            "type": "string",
+                            "description": "Polish tax identification number (NIP) - 10 digits",
+                            "pattern": "^[0-9]{10}$"
+                        },
+                        "ksefToken": {
+                            "type": "string",
+                            "description": "KSeF authorization token generated from KSeF portal"
+                        }
+                    },
+                    "required": ["nip", "ksefToken"]
+                }),
+            ),
+            ToolDefinition::new(
+                "get_authentication_status",
+                "Get current authentication status",
+                json!({"type": "object", "properties": {}}),
+            ),
+            ToolDefinition::new(
+                "logout",
+                "Clear authentication session",
+                json!({"type": "object", "properties": {}}),
+            ),
+            ToolDefinition::new(
+                "refresh_token",
+                "Refresh the access token using refresh token",
+                json!({"type": "object", "properties": {}}),
+            ),
         ];
 
         JsonRpcResponse::success(id, json!({ "tools": tools }))
@@ -317,6 +366,32 @@ impl McpServer {
                 let result = self.ksef_client.submit_invoice(session_ref, invoice_data).await?;
                 Ok(format!("Invoice submitted:\n{}", result))
             }
+            "authenticate" => {
+                let nip = args
+                    .get("nip")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing nip"))?;
+
+                let ksef_token = args
+                    .get("ksefToken")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing ksefToken"))?;
+
+                let result = self.ksef_client.authenticate(nip, ksef_token).await?;
+                Ok(result)
+            }
+            "get_authentication_status" => {
+                let result = self.ksef_client.get_auth_status()?;
+                Ok(result)
+            }
+            "logout" => {
+                let result = self.ksef_client.logout()?;
+                Ok(result)
+            }
+            "refresh_token" => {
+                let result = self.ksef_client.refresh_access_token().await?;
+                Ok(result)
+            }
             _ => Err(anyhow!("Unknown tool: {}", tool_name)),
         }
     }
@@ -341,9 +416,12 @@ async fn main() -> Result<()> {
 
         let response = server.handle_request(request).await;
 
-        let response_json = serde_json::to_string(&response)?;
-        writeln!(stdout, "{}", response_json)?;
-        stdout.flush()?;
+        // Only send response if it's not a notification
+        if let Some(resp) = response {
+            let response_json = serde_json::to_string(&resp)?;
+            writeln!(stdout, "{}", response_json)?;
+            stdout.flush()?;
+        }
     }
 
     Ok(())
