@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use ksef_client::KsefClient;
+use ksef_invoice_generator::{Invoice, InvoiceLineItem, Party};
 use mcp_protocol::{JsonRpcRequest, JsonRpcResponse, ToolCallResult, ToolDefinition};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
@@ -343,6 +344,222 @@ impl McpServer {
                         }
                     },
                     "required": ["sessionReferenceNumber", "invoiceHash", "invoiceSize", "encryptedInvoiceHash", "encryptedInvoiceSize", "encryptedInvoiceContent"]
+                }),
+            ),
+            ToolDefinition::new(
+                "generate_invoice",
+                "Generate a KSeF-compliant invoice XML with all required fields",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "seller": {
+                            "type": "object",
+                            "description": "Seller information (Podmiot1)",
+                            "properties": {
+                                "nip": {
+                                    "type": "string",
+                                    "description": "Seller NIP (10 digits)",
+                                    "pattern": "^[0-9]{10}$"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Seller company name"
+                                },
+                                "address": {
+                                    "type": "string",
+                                    "description": "Seller address (optional)"
+                                }
+                            },
+                            "required": ["nip", "name"]
+                        },
+                        "buyer": {
+                            "type": "object",
+                            "description": "Buyer information (Podmiot2)",
+                            "properties": {
+                                "nip": {
+                                    "type": "string",
+                                    "description": "Buyer NIP (10 digits)",
+                                    "pattern": "^[0-9]{10}$"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Buyer company name"
+                                },
+                                "address": {
+                                    "type": "string",
+                                    "description": "Buyer address (optional)"
+                                }
+                            },
+                            "required": ["nip", "name"]
+                        },
+                        "invoiceNumber": {
+                            "type": "string",
+                            "description": "Invoice number (e.g., FV/2026/01/001)"
+                        },
+                        "invoiceDate": {
+                            "type": "string",
+                            "description": "Invoice date (YYYY-MM-DD format)"
+                        },
+                        "lineItems": {
+                            "type": "array",
+                            "description": "Invoice line items",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "lineNumber": {
+                                        "type": "integer",
+                                        "description": "Line number (sequential, starting from 1)"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "description": "Product/service description"
+                                    },
+                                    "unit": {
+                                        "type": "string",
+                                        "description": "Unit of measurement (e.g., 'szt', 'usł', 'godz')"
+                                    },
+                                    "quantity": {
+                                        "type": "number",
+                                        "description": "Quantity"
+                                    },
+                                    "unitPrice": {
+                                        "type": "number",
+                                        "description": "Net unit price"
+                                    },
+                                    "netAmount": {
+                                        "type": "number",
+                                        "description": "Net amount (quantity * unitPrice)"
+                                    },
+                                    "vatRate": {
+                                        "type": "integer",
+                                        "description": "VAT rate percentage (e.g., 23, 8, 5, 0)"
+                                    }
+                                },
+                                "required": ["lineNumber", "description", "unit", "quantity", "unitPrice", "netAmount", "vatRate"]
+                            },
+                            "minItems": 1
+                        },
+                        "currency": {
+                            "type": "string",
+                            "description": "Currency code (default: PLN)",
+                            "default": "PLN"
+                        }
+                    },
+                    "required": ["seller", "buyer", "invoiceNumber", "invoiceDate", "lineItems"]
+                }),
+            ),
+            ToolDefinition::new(
+                "generate_and_submit_invoice",
+                "Generate and submit a KSeF invoice in one step (requires active session with encryption key)",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "sessionReferenceNumber": {
+                            "type": "string",
+                            "description": "Reference number of the active online session"
+                        },
+                        "symmetricKey": {
+                            "type": "string",
+                            "description": "Base64-encoded AES-256 symmetric key (32 bytes) used to create the session"
+                        },
+                        "initializationVector": {
+                            "type": "string",
+                            "description": "Base64-encoded initialization vector (16 bytes) used to create the session"
+                        },
+                        "seller": {
+                            "type": "object",
+                            "description": "Seller information (Podmiot1)",
+                            "properties": {
+                                "nip": {
+                                    "type": "string",
+                                    "description": "Seller NIP (10 digits)",
+                                    "pattern": "^[0-9]{10}$"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Seller company name"
+                                },
+                                "address": {
+                                    "type": "string",
+                                    "description": "Seller address (optional)"
+                                }
+                            },
+                            "required": ["nip", "name"]
+                        },
+                        "buyer": {
+                            "type": "object",
+                            "description": "Buyer information (Podmiot2)",
+                            "properties": {
+                                "nip": {
+                                    "type": "string",
+                                    "description": "Buyer NIP (10 digits)",
+                                    "pattern": "^[0-9]{10}$"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Buyer company name"
+                                },
+                                "address": {
+                                    "type": "string",
+                                    "description": "Buyer address (optional)"
+                                }
+                            },
+                            "required": ["nip", "name"]
+                        },
+                        "invoiceNumber": {
+                            "type": "string",
+                            "description": "Invoice number (e.g., FV/2026/01/001)"
+                        },
+                        "invoiceDate": {
+                            "type": "string",
+                            "description": "Invoice date (YYYY-MM-DD format)"
+                        },
+                        "lineItems": {
+                            "type": "array",
+                            "description": "Invoice line items",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "lineNumber": {
+                                        "type": "integer",
+                                        "description": "Line number (sequential, starting from 1)"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "description": "Product/service description"
+                                    },
+                                    "unit": {
+                                        "type": "string",
+                                        "description": "Unit of measurement (e.g., 'szt', 'usł', 'godz')"
+                                    },
+                                    "quantity": {
+                                        "type": "number",
+                                        "description": "Quantity"
+                                    },
+                                    "unitPrice": {
+                                        "type": "number",
+                                        "description": "Net unit price"
+                                    },
+                                    "netAmount": {
+                                        "type": "number",
+                                        "description": "Net amount (quantity * unitPrice)"
+                                    },
+                                    "vatRate": {
+                                        "type": "integer",
+                                        "description": "VAT rate percentage (e.g., 23, 8, 5, 0)"
+                                    }
+                                },
+                                "required": ["lineNumber", "description", "unit", "quantity", "unitPrice", "netAmount", "vatRate"]
+                            },
+                            "minItems": 1
+                        },
+                        "currency": {
+                            "type": "string",
+                            "description": "Currency code (default: PLN)",
+                            "default": "PLN"
+                        }
+                    },
+                    "required": ["sessionReferenceNumber", "symmetricKey", "initializationVector", "seller", "buyer", "invoiceNumber", "invoiceDate", "lineItems"]
                 }),
             ),
             ToolDefinition::new(
@@ -694,6 +911,278 @@ impl McpServer {
 
                 let result = self.ksef_client.submit_invoice(session_ref, &invoice_data).await?;
                 Ok(format!("Invoice submitted:\n{}", result))
+            }
+            "generate_invoice" => {
+                // Parse seller
+                let seller_obj = args
+                    .get("seller")
+                    .ok_or_else(|| anyhow!("Missing seller"))?;
+                let seller = Party {
+                    nip: seller_obj
+                        .get("nip")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| anyhow!("Missing seller.nip"))?
+                        .to_string(),
+                    nazwa: seller_obj
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| anyhow!("Missing seller.name"))?
+                        .to_string(),
+                    adres: seller_obj
+                        .get("address")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                };
+
+                // Parse buyer
+                let buyer_obj = args
+                    .get("buyer")
+                    .ok_or_else(|| anyhow!("Missing buyer"))?;
+                let buyer = Party {
+                    nip: buyer_obj
+                        .get("nip")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| anyhow!("Missing buyer.nip"))?
+                        .to_string(),
+                    nazwa: buyer_obj
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| anyhow!("Missing buyer.name"))?
+                        .to_string(),
+                    adres: buyer_obj
+                        .get("address")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                };
+
+                // Parse invoice details
+                let invoice_number = args
+                    .get("invoiceNumber")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing invoiceNumber"))?
+                    .to_string();
+                let invoice_date = args
+                    .get("invoiceDate")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing invoiceDate"))?
+                    .to_string();
+                let currency = args
+                    .get("currency")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("PLN")
+                    .to_string();
+
+                // Create invoice
+                let mut invoice = Invoice::new(seller, buyer, invoice_date, invoice_number);
+                invoice.waluta = currency;
+
+                // Parse line items
+                let line_items_arr = args
+                    .get("lineItems")
+                    .and_then(|v| v.as_array())
+                    .ok_or_else(|| anyhow!("Missing lineItems"))?;
+
+                for item_val in line_items_arr {
+                    let item = InvoiceLineItem {
+                        nr_wiersza: item_val
+                            .get("lineNumber")
+                            .and_then(|v| v.as_u64())
+                            .ok_or_else(|| anyhow!("Missing lineNumber"))? as u32,
+                        opis: item_val
+                            .get("description")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("Missing description"))?
+                            .to_string(),
+                        jednostka: item_val
+                            .get("unit")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("Missing unit"))?
+                            .to_string(),
+                        ilosc: item_val
+                            .get("quantity")
+                            .and_then(|v| v.as_f64())
+                            .ok_or_else(|| anyhow!("Missing quantity"))?,
+                        cena_netto: item_val
+                            .get("unitPrice")
+                            .and_then(|v| v.as_f64())
+                            .ok_or_else(|| anyhow!("Missing unitPrice"))?,
+                        kwota_netto: item_val
+                            .get("netAmount")
+                            .and_then(|v| v.as_f64())
+                            .ok_or_else(|| anyhow!("Missing netAmount"))?,
+                        stawka_vat: item_val
+                            .get("vatRate")
+                            .and_then(|v| v.as_u64())
+                            .ok_or_else(|| anyhow!("Missing vatRate"))? as u8,
+                    };
+                    invoice.add_line_item(item);
+                }
+
+                // Generate XML
+                let xml = invoice.generate_ksef_xml();
+                Ok(format!("Invoice XML generated successfully:\n\n{}", xml))
+            }
+            "generate_and_submit_invoice" => {
+                use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+
+                // Get session reference
+                let session_ref = args
+                    .get("sessionReferenceNumber")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing sessionReferenceNumber"))?;
+
+                // Get encryption parameters
+                let symmetric_key_base64 = args
+                    .get("symmetricKey")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing symmetricKey"))?;
+                let iv_base64 = args
+                    .get("initializationVector")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing initializationVector"))?;
+
+                // Decode encryption parameters
+                let symmetric_key_bytes = BASE64
+                    .decode(symmetric_key_base64.as_bytes())
+                    .map_err(|e| anyhow!("Failed to decode symmetric key: {}", e))?;
+                let symmetric_key: [u8; 32] = symmetric_key_bytes
+                    .try_into()
+                    .map_err(|_| anyhow!("Symmetric key must be 32 bytes"))?;
+
+                let iv_bytes = BASE64
+                    .decode(iv_base64.as_bytes())
+                    .map_err(|e| anyhow!("Failed to decode IV: {}", e))?;
+                let iv: [u8; 16] = iv_bytes
+                    .try_into()
+                    .map_err(|_| anyhow!("IV must be 16 bytes"))?;
+
+                // Parse seller
+                let seller_obj = args
+                    .get("seller")
+                    .ok_or_else(|| anyhow!("Missing seller"))?;
+                let seller = Party {
+                    nip: seller_obj
+                        .get("nip")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| anyhow!("Missing seller.nip"))?
+                        .to_string(),
+                    nazwa: seller_obj
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| anyhow!("Missing seller.name"))?
+                        .to_string(),
+                    adres: seller_obj
+                        .get("address")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                };
+
+                // Parse buyer
+                let buyer_obj = args
+                    .get("buyer")
+                    .ok_or_else(|| anyhow!("Missing buyer"))?;
+                let buyer = Party {
+                    nip: buyer_obj
+                        .get("nip")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| anyhow!("Missing buyer.nip"))?
+                        .to_string(),
+                    nazwa: buyer_obj
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| anyhow!("Missing buyer.name"))?
+                        .to_string(),
+                    adres: buyer_obj
+                        .get("address")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                };
+
+                // Parse invoice details
+                let invoice_number = args
+                    .get("invoiceNumber")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing invoiceNumber"))?
+                    .to_string();
+                let invoice_date = args
+                    .get("invoiceDate")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing invoiceDate"))?
+                    .to_string();
+                let currency = args
+                    .get("currency")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("PLN")
+                    .to_string();
+
+                // Create invoice
+                let mut invoice = Invoice::new(seller, buyer, invoice_date, invoice_number);
+                invoice.waluta = currency;
+
+                // Parse line items
+                let line_items_arr = args
+                    .get("lineItems")
+                    .and_then(|v| v.as_array())
+                    .ok_or_else(|| anyhow!("Missing lineItems"))?;
+
+                for item_val in line_items_arr {
+                    let item = InvoiceLineItem {
+                        nr_wiersza: item_val
+                            .get("lineNumber")
+                            .and_then(|v| v.as_u64())
+                            .ok_or_else(|| anyhow!("Missing lineNumber"))? as u32,
+                        opis: item_val
+                            .get("description")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("Missing description"))?
+                            .to_string(),
+                        jednostka: item_val
+                            .get("unit")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| anyhow!("Missing unit"))?
+                            .to_string(),
+                        ilosc: item_val
+                            .get("quantity")
+                            .and_then(|v| v.as_f64())
+                            .ok_or_else(|| anyhow!("Missing quantity"))?,
+                        cena_netto: item_val
+                            .get("unitPrice")
+                            .and_then(|v| v.as_f64())
+                            .ok_or_else(|| anyhow!("Missing unitPrice"))?,
+                        kwota_netto: item_val
+                            .get("netAmount")
+                            .and_then(|v| v.as_f64())
+                            .ok_or_else(|| anyhow!("Missing netAmount"))?,
+                        stawka_vat: item_val
+                            .get("vatRate")
+                            .and_then(|v| v.as_u64())
+                            .ok_or_else(|| anyhow!("Missing vatRate"))? as u8,
+                    };
+                    invoice.add_line_item(item);
+                }
+
+                // Generate XML
+                let invoice_xml = invoice.generate_ksef_xml();
+
+                // Encrypt invoice
+                let (encrypted_content, original_hash, encrypted_hash, original_size, encrypted_size) =
+                    KsefClient::encrypt_invoice_content(&invoice_xml, &symmetric_key, &iv)?;
+
+                // Prepare submission data
+                let submit_data = json!({
+                    "invoiceHash": original_hash,
+                    "invoiceSize": original_size,
+                    "encryptedInvoiceHash": encrypted_hash,
+                    "encryptedInvoiceSize": encrypted_size,
+                    "encryptedInvoiceContent": encrypted_content,
+                });
+
+                // Submit invoice
+                let result = self.ksef_client.submit_invoice(session_ref, &submit_data).await?;
+                Ok(format!(
+                    "Invoice generated and submitted successfully!\n\nSubmission response:\n{}",
+                    result
+                ))
             }
             "authenticate" => {
                 let nip = args

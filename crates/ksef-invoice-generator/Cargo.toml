@@ -1,0 +1,13 @@
+[package]
+name = "ksef-invoice-generator"
+version = "0.1.0"
+edition = "2021"
+authors = ["Flippico Sp. z o.o."]
+description = "Invoice XML generator for Polish KSeF (Krajowy System e-Faktur)"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+quick-xml = { version = "0.36", features = ["serialize"] }
+rand = "0.8"

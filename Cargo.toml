@@ -12,6 +12,13 @@ readme = "README.md"
 keywords = ["mcp", "ksef", "invoicing", "poland", "e-invoicing"]
 categories = ["api-bindings", "command-line-utilities"]
 
+[workspace]
+members = [
+    "crates/mcp-protocol",
+    "crates/ksef-client",
+    "crates/ksef-invoice-generator",
+]
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
@@ -19,11 +26,6 @@ edition = "2021"
 [[bin]]
 name = "ksef-mcp"
 path = "src/main.rs"
-
-members = [
-    "crates/mcp-protocol",
-    "crates/ksef-client",
-]
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -35,8 +37,10 @@ anyhow = "1"
 [dependencies]
 mcp-protocol = { path = "./crates/mcp-protocol" }
 ksef-client = { path = "./crates/ksef-client" }
+ksef-invoice-generator = { path = "./crates/ksef-invoice-generator" }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
 anyhow.workspace = true
+base64 = "0.22"

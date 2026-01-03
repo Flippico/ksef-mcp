@@ -188,6 +188,54 @@ impl KsefClient {
         Ok(BASE64.encode(&encrypted))
     }
 
+    /// Helper: Encrypt invoice content with AES-256-CBC
+    /// Returns (encrypted_content_base64, original_hash_base64, encrypted_hash_base64, original_size, encrypted_size)
+    pub fn encrypt_invoice_content(
+        invoice_xml: &str,
+        symmetric_key: &[u8; 32],
+        iv: &[u8; 16],
+    ) -> Result<(String, String, String, usize, usize)> {
+        use aes::Aes256;
+        use cbc::Encryptor;
+        use cipher::{block_padding::Pkcs7, BlockEncryptMut, KeyIvInit};
+        use sha2::{Digest, Sha256};
+
+        type Aes256CbcEnc = Encryptor<Aes256>;
+
+        // Get original content as bytes
+        let original_bytes = invoice_xml.as_bytes();
+        let original_size = original_bytes.len();
+
+        // Calculate SHA256 hash of original content
+        let mut hasher = Sha256::new();
+        hasher.update(original_bytes);
+        let original_hash = hasher.finalize();
+        let original_hash_base64 = BASE64.encode(&original_hash);
+
+        // Encrypt with AES-256-CBC using PKCS#7 padding
+        let cipher = Aes256CbcEnc::new(symmetric_key.into(), iv.into());
+        let encrypted_bytes = cipher
+            .encrypt_padded_vec_mut::<Pkcs7>(original_bytes);
+        let encrypted_size = encrypted_bytes.len();
+
+        // Calculate SHA256 hash of encrypted content
+        let mut hasher = Sha256::new();
+        hasher.update(&encrypted_bytes);
+        let encrypted_hash = hasher.finalize();
+        let encrypted_hash_base64 = BASE64.encode(&encrypted_hash);
+
+        // Encode encrypted content to Base64
+        let encrypted_content_base64 = BASE64.encode(&encrypted_bytes);
+
+        Ok((
+            encrypted_content_base64,
+            original_hash_base64,
+            encrypted_hash_base64,
+            original_size,
+            encrypted_size,
+        ))
+    }
+
     /// Step 2: Authenticate with KSeF token
     pub async fn authenticate_with_ksef_token(
         &self,
