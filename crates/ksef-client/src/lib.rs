@@ -345,7 +345,7 @@ impl KsefClient {
             .check_auth_status(&reference_number, &auth_token)
             .await?;
 
-        if status.status.code <= !200 {
+        if status.status.code != 100 && status.status.code != 200 {
             return Err(anyhow!(
                 "Authentication failed with status {}: {}",
                 status.status.code,
@@ -594,6 +594,8 @@ impl KsefClient {
         let url = format!("{}/sessions/online", self.base_url);
         let headers = self.build_headers(None);
 
+        eprintln!("Creating online session with params: {}", session_params);
+
         let response = self
             .client
             .post(&url)
@@ -603,6 +605,8 @@ impl KsefClient {
             .await?;
         let status = response.status();
         let body = response.text().await?;
+
+        eprintln!("Response status: {}, body: {}", status, body);
 
         if status.is_success() {
             Ok(body)
@@ -629,20 +633,185 @@ impl KsefClient {
         }
     }
 
-    pub async fn submit_invoice(&self, session_ref: &str, invoice_data: &str) -> Result<String> {
-        let url = format!("{}/sessions/{}/invoices", self.base_url, session_ref);
-
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("Content-Type", "application/xml".parse()?);
-        let headers = self.build_headers(Some(headers));
+    pub async fn submit_invoice(&self, session_ref: &str, invoice_data: &Value) -> Result<String> {
+        let url = format!("{}/sessions/online/{}/invoices", self.base_url, session_ref);
+        let headers = self.build_headers(None);
 
         let response = self
             .client
             .post(&url)
             .headers(headers)
-            .body(invoice_data.to_string())
+            .json(invoice_data)
             .send()
             .await?;
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(anyhow!("API error ({}): {}", status, body))
+        }
+    }
+
+    pub async fn get_sessions(
+        &self,
+        page_size: i64,
+        continuation_token: Option<&str>,
+    ) -> Result<String> {
+        let url = format!("{}/sessions?pageSize={}", self.base_url, page_size);
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(token) = continuation_token {
+            headers.insert("x-continuation-token", token.parse()?);
+        }
+        let headers = self.build_headers(Some(headers));
+
+        let response = self.client.get(&url).headers(headers).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(anyhow!("API error ({}): {}", status, body))
+        }
+    }
+
+    pub async fn get_session_status(&self, reference_number: &str) -> Result<String> {
+        let url = format!("{}/sessions/{}", self.base_url, reference_number);
+        let headers = self.build_headers(None);
+
+        let response = self.client.get(&url).headers(headers).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(anyhow!("API error ({}): {}", status, body))
+        }
+    }
+
+    pub async fn get_session_invoices(
+        &self,
+        reference_number: &str,
+        continuation_token: Option<&str>,
+    ) -> Result<String> {
+        let url = format!("{}/sessions/{}/invoices", self.base_url, reference_number);
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(token) = continuation_token {
+            headers.insert("x-continuation-token", token.parse()?);
+        }
+        let headers = self.build_headers(Some(headers));
+
+        let response = self.client.get(&url).headers(headers).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(anyhow!("API error ({}): {}", status, body))
+        }
+    }
+
+    pub async fn get_invoice_upo_by_ksef(
+        &self,
+        session_ref: &str,
+        ksef_number: &str,
+    ) -> Result<String> {
+        let url = format!(
+            "{}/sessions/{}/invoices/ksef/{}/upo",
+            self.base_url, session_ref, ksef_number
+        );
+        let headers = self.build_headers(None);
+
+        let response = self.client.get(&url).headers(headers).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(anyhow!("API error ({}): {}", status, body))
+        }
+    }
+
+    pub async fn get_invoice_upo_by_reference(
+        &self,
+        session_ref: &str,
+        invoice_ref: &str,
+    ) -> Result<String> {
+        let url = format!(
+            "{}/sessions/{}/invoices/{}/upo",
+            self.base_url, session_ref, invoice_ref
+        );
+        let headers = self.build_headers(None);
+
+        let response = self.client.get(&url).headers(headers).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(anyhow!("API error ({}): {}", status, body))
+        }
+    }
+
+    pub async fn get_session_upo(
+        &self,
+        session_ref: &str,
+        upo_ref: &str,
+    ) -> Result<String> {
+        let url = format!(
+            "{}/sessions/{}/upo/{}",
+            self.base_url, session_ref, upo_ref
+        );
+        let headers = self.build_headers(None);
+
+        let response = self.client.get(&url).headers(headers).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(anyhow!("API error ({}): {}", status, body))
+        }
+    }
+
+    pub async fn create_batch_session(&self, session_params: &Value) -> Result<String> {
+        let url = format!("{}/sessions/batch", self.base_url);
+        let headers = self.build_headers(None);
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .json(session_params)
+            .send()
+            .await?;
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(anyhow!("API error ({}): {}", status, body))
+        }
+    }
+
+    pub async fn close_batch_session(&self, reference_number: &str) -> Result<String> {
+        let url = format!(
+            "{}/sessions/batch/{}/close",
+            self.base_url, reference_number
+        );
+        let headers = self.build_headers(None);
+
+        let response = self.client.post(&url).headers(headers).send().await?;
         let status = response.status();
         let body = response.text().await?;
 
