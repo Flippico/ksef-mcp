@@ -1,5 +1,6 @@
 /target
 /openapi
+/temp
 Cargo.lock
 *.swp
 *.swo
